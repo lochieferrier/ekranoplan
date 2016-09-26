@@ -218,9 +218,9 @@ constraints+=[	I_2 <= 3.141*(r_2**3)*t_1,
 		s_2 <= s_2limit/FOS
 	    ]
 
-#constraints +=[deflec_1 >= M_root*span**2/(E_1*I_1*8),
-#			  deflec_2 <= M_root*span**2/(E_1*I_1*8),
-#			  deflec_1 <= deflec_2]
+constraints +=[deflec_1 >= M_root*span**2/(E_1*I_1*8),
+			  deflec_2 <= M_root*span**2/(E_1*I_1*8),
+			  deflec_1 <= deflec_2]
 
 # Need to introduce deflection constraint
 
