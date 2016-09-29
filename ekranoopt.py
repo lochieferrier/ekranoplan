@@ -121,27 +121,30 @@ W_acc = Variable('W_acc',10*9.8,'N', 'accessories weight')
 W_eng = Variable('W_eng',43*9.8,'N', 'engine weight')
 W_wings = Variable('W_wings','N','wing weight') # Both wings
 W_tail = Variable('W_tail',10*9.8,'N','tail weight')
+W_boom = Variable('W_boom',10*9.8,'N','tail boom weight')
 W_mnt = Variable('W_mnt',8*9.8,'N','mount weight')
 W_fuel = Variable('W_fuel','N','fuel weight')
 W_zfw = Variable('W_zfw','N','zero fuel weight')
 W_fuse = Variable('W_fuse','N','weight of everything except for wings')
 with gpkit.SignomialsEnabled():
-	constraints+=[W_zfw>= W_boat + W_person + W_acc + W_eng + W_wings +W_tail + W_mnt]
+	constraints+=[W_zfw>= W_boat + W_person + W_acc + W_eng + W_wings + W_boom + W_tail + W_mnt]
 	constraints+=[W >= W_zfw+W_fuel]
 	constraints+=[W_fuel/W_zfw >= z_bre + (z_bre**2)/2 + (z_bre**3)/6 + (z_bre**4)/24]
-	constraints+=[W_fuse >= W_boat + W_person + W_acc + W_eng +W_tail + W_mnt + W_fuel]
+	constraints+=[W_fuse >= W_boat + W_person + W_acc + W_eng + W_boom + W_tail + W_mnt + W_fuel]
 	constraints+=[W <= Variable('Wupper',2500,'N','weight upper limit imposed by boat')]
 
 #Engine calculations
 #From here: http://www.dynomitedynamometer.com/dyno-tech-talk/using_bsfc.htm
-# BSFC = Variable('BSFC',(0.8*2.205*0.00027)*0.00134102,'kg/W/s','brake fuel consumption per horsepower')
+BSFC = Variable('BSFC',0.85 * 2.21 / (745.7*3600),'kg/W/s','brake fuel consumption per horsepower')
+
 # # TSFC <= (BSFC*P)/T
-# mdot = Variable('mdot',26099*(0.8*2.205*0.00027)*0.00134102,'kg/s','fuel mass flow')
-# # constraints+=[mdot <= P*BSFC]
+mdot = Variable('mdot','kg/s','fuel mass flow')
+constraints+=[mdot >= P*BSFC]
 h_fuel = Variable('h_fuel',42.448e6,'J/kg','heating value of conventional gasoline')
+
+#P_fuel = Variable('P_fuel',mdot*h_fuel,'W','fuel power')
+#constraints+=[P_fuel <= mdot*h_fuel]
 constraints+=[P<=P_upper]
-# P_fuel = Variable('P_fuel',mdot*h_fuel,'W','fuel power')
-# # constraints+=[P_fuel <= ,
 # # 			P_fuel >= Variable('P_fuellower',0.1,'W','fuel power lower limit')]
 a = 0.8
 #Propulsion whole chain
@@ -234,9 +237,10 @@ with gpkit.SignomialsEnabled():
 #Balance
 
 #General flight constraints
-constraints += [#R<=(V/g)*(1/TSFC)*(C_L/C_D)*Wfrac,
+constraints += [R <= (W_fuel/(mdot*g)) * V,
+		#R<=(V/g)*(1/TSFC)*(C_L/C_D)*Wfrac,
 			   W_fuel <= Variable('W_fuelupper',18*9.8,'N','fuel upper limit'),
-			   R >= Variable("R_lower",1e3,'m','range lower bound'),
+			   #R >= Variable("R_lower",1e3,'m','range lower bound'),
 			   z_bre >= (g*R*T)/(h_fuel*n_0*W),
 			   T >= 0.5*rho*C_D*S*V**2,
 			   W <= 0.5 * rho * C_L * S * V**2,
@@ -257,4 +261,7 @@ print('Range is ' + str(sol(0.001/objective))+' km')
 print('At %s percent of range goal'%str(100*rangeInKm/rangeObjective))
 print('MTOW of ' + str(sol(W)))
 print('Cruise LD of '+str(sol(C_L/C_D)))
+W_fuelsol = sol(W_fuel)
+W_zfwsol = sol(W_zfw)
+print('Full fuel fraction of ' +str(W_fuelsol/(W_zfwsol+W_fuelsol)))
 # print('TSFC of  '+str(sol(TSFC)))
