@@ -146,7 +146,7 @@ h_fuel = Variable('h_fuel',42.448e6,'J/kg','heating value of conventional gasoli
 #constraints+=[P_fuel <= mdot*h_fuel]
 powerToWeight_eng = Variable('powerToWeight_eng',61.93,'W/N','Power to weight sampled linearly at current eng')
 constraints+=[P<=P_upper,
-			  P<=powerToWeight_eng*W_eng]
+			  P_upper<=powerToWeight_eng*W_eng]
 # # 			P_fuel >= Variable('P_fuellower',0.1,'W','fuel power lower limit')]
 a = 0.8
 #Propulsion whole chain
@@ -245,10 +245,10 @@ W_MTOW = Variable('W_MTOW','N','weight var for MTOW')
 
 T_takeoff = Variable('T_takeoff','N','max thrust, generated for takeoff')
 P_takeoff = Variable('P_takeoff','W','power for takeoff')
-savitskyConstant = Variable('savitskyConstant',0.055,'-','savitsky constant from eqn')
+savitskyConstant = Variable('savitskyConstant',0.055,'m^0.5 /s','savitsky constant from eqn')
 J_takeoff = Variable('J_takeoff','-','takeoff propeller advance ratio')
 f_prop_takeoff = Variable('f_prop_takeoff','1/s','propeller frequency for takeoff')
-n_prop_takeoff = Variable('n_prop_takeoff','-','propeller efficiency for takeoff')
+n_prop_takeoff = Variable('n_prop_takeoff','-','propeller efficiency for cruise')
 LWL = Variable('LWL',5,'m','Length of waterline')
 
 constraints += [W_MTOW >= W_zfw + W_fuel]
@@ -258,13 +258,15 @@ constraints+=[J_takeoff<=Vmin/(f_prop_takeoff*D_prop),
 			  f_prop_takeoff >= Variable('f_proplower',25,'1/s','prop speed lower limit'),
 			  n_prop_takeoff <= a*J_takeoff,
 			  J_takeoff <= 1] #As defined by manufacturer at 2600 RPM
+
 constraints+=[P_takeoff <= P_upper]
 constraints+=[T_takeoff<=(P_takeoff*n_prop_takeoff)/Vmin]
 
-#need to fix non-dimensionality here with froude number relation
-constraints+=[D_water >= W_MTOW*((Vmin/LWL**0.5)*0.015 + savitskyConstant)]
-constraints+=[T_takeoff>=D_water]
+# Fixing savitsky for 23 m/s
+# Actually 0.209, going to be 25% pessimistic
 
+constraints+=[D_water >= W_MTOW*0.1]
+constraints+=[T_takeoff>=D_water]
 
 # constraints += [W_MTOW >= W_zfw + W_fuel,
 # 				 >= ,
@@ -273,7 +275,7 @@ constraints+=[T_takeoff>=D_water]
 constraints += [R <= (W_fuel/(mdot*g)) * V,
 		#R<=(V/g)*(1/TSFC)*(C_L/C_D)*Wfrac,
 			   W_fuel <= Variable('W_fuelupper',18*9.8,'N','fuel upper limit'),
-			   #R >= Variable("R_lower",1e3,'m','range lower bound'),
+			   R >= Variable("R_lower",1e3,'m','range lower bound'),
 			   z_bre >= (g*R*T)/(h_fuel*n_0*W),
 			   T >= 0.5*rho*C_D*S*V**2,
 			   W <= 0.5 * rho * C_L * S * V**2,
@@ -297,4 +299,5 @@ print('Cruise LD of '+str(sol(C_L/C_D)))
 W_fuelsol = sol(W_fuel)
 W_zfwsol = sol(W_zfw)
 print('Full fuel fraction of ' +str(W_fuelsol/(W_zfwsol+W_fuelsol)))
+print('cruise power setting of ' +str(sol(P/P_takeoff)))
 # print('TSFC of  '+str(sol(TSFC)))
