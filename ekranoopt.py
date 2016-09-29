@@ -135,7 +135,7 @@ with gpkit.SignomialsEnabled():
 
 #Engine calculations
 #From here: http://www.dynomitedynamometer.com/dyno-tech-talk/using_bsfc.htm
-BSFC = Variable('BSFC',0.85 * 2.21 / (745.7*3600),'kg/W/s','brake fuel consumption per horsepower')
+BSFC = Variable('BSFC',(0.85 /2.205) / (745.7*3600),'kg/W/s','brake fuel consumption per horsepower')
 
 # # TSFC <= (BSFC*P)/T
 mdot = Variable('mdot','kg/s','fuel mass flow')
