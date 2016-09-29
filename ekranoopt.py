@@ -118,7 +118,7 @@ constraints+=[C_Di >= C_L**2/(3.1415*e*A),
 W_boat = Variable('W_boat',10.4*9.8,'N','boat weight')
 W_person = Variable('W_person',75*9.8,'N','person weight')
 W_acc = Variable('W_acc',10*9.8,'N', 'accessories weight')
-W_eng = Variable('W_eng',43*9.8,'N', 'engine weight')
+W_eng = Variable('W_eng','N', 'engine weight')
 W_wings = Variable('W_wings','N','wing weight') # Both wings
 W_tail = Variable('W_tail',10*9.8,'N','tail weight')
 W_boom = Variable('W_boom',10*9.8,'N','tail boom weight')
@@ -144,7 +144,9 @@ h_fuel = Variable('h_fuel',42.448e6,'J/kg','heating value of conventional gasoli
 
 #P_fuel = Variable('P_fuel',mdot*h_fuel,'W','fuel power')
 #constraints+=[P_fuel <= mdot*h_fuel]
-constraints+=[P<=P_upper]
+powerToWeight_eng = Variable('powerToWeight_eng',61.93,'W/N','Power to weight sampled linearly at current eng')
+constraints+=[P<=P_upper,
+			  P<=powerToWeight_eng*W_eng]
 # # 			P_fuel >= Variable('P_fuellower',0.1,'W','fuel power lower limit')]
 a = 0.8
 #Propulsion whole chain
@@ -234,9 +236,18 @@ with gpkit.SignomialsEnabled():
 				  W_fabric >= g*rho_fabric*S,
 				  W_wings>= W_t1 +W_t2+ W_fabric]
 
-#Balance
+# Takeoff flight constraints
+D_water = Variable('D_water','N','drag of water on hull during takeoff condition')
+# Raymer thinks on p285 that the drag of the water is only 20% of the waterborne weight
+# Savitsky seems to think this, based on linear extrapolation:
+# total resistance / waterborne weight = 0.015 * (V/sqrt(LWL)) + 0.055
+W_MTOW = Variable('W_MTOW','N','weight var for MTOW')
 
-#General flight constraints
+# savitskyConstant = Variable('savitskyConstant',0.055,'-','savitsky constant from eqn')
+# constraints += [W_MTOW >= W_zfw + W_fuel,
+# 				 >= ,
+# 				]
+#Cruise flight constraints
 constraints += [R <= (W_fuel/(mdot*g)) * V,
 		#R<=(V/g)*(1/TSFC)*(C_L/C_D)*Wfrac,
 			   W_fuel <= Variable('W_fuelupper',18*9.8,'N','fuel upper limit'),
