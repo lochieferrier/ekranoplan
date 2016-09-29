@@ -158,7 +158,7 @@ n_prop = Variable('n_prop','-','propeller efficiency')
 
 constraints+=[J<=V/(f_prop*D_prop),
 			  f_prop <= Variable('f_proplimit',45,'1/s','prop speed limit'),
-			  f_prop >= Variable('f_proplower',35,'1/s','prop speed lower limit'),
+			  f_prop >= Variable('f_proplower',25,'1/s','prop speed lower limit'),
 			  n_prop <= a*J,
 			  J <= 1] #As defined by manufacturer at 2600 RPM
 constraints+=[T<=(P*n_prop)/V]
@@ -243,7 +243,29 @@ D_water = Variable('D_water','N','drag of water on hull during takeoff condition
 # total resistance / waterborne weight = 0.015 * (V/sqrt(LWL)) + 0.055
 W_MTOW = Variable('W_MTOW','N','weight var for MTOW')
 
-# savitskyConstant = Variable('savitskyConstant',0.055,'-','savitsky constant from eqn')
+T_takeoff = Variable('T_takeoff','N','max thrust, generated for takeoff')
+P_takeoff = Variable('P_takeoff','W','power for takeoff')
+savitskyConstant = Variable('savitskyConstant',0.055,'-','savitsky constant from eqn')
+J_takeoff = Variable('J_takeoff','-','takeoff propeller advance ratio')
+f_prop_takeoff = Variable('f_prop_takeoff','1/s','propeller frequency for takeoff')
+n_prop_takeoff = Variable('n_prop_takeoff','-','propeller efficiency for takeoff')
+LWL = Variable('LWL',5,'m','Length of waterline')
+
+constraints += [W_MTOW >= W_zfw + W_fuel]
+
+constraints+=[J_takeoff<=Vmin/(f_prop_takeoff*D_prop),
+			  f_prop_takeoff <= Variable('f_proplimit',45,'1/s','prop speed limit'),
+			  f_prop_takeoff >= Variable('f_proplower',25,'1/s','prop speed lower limit'),
+			  n_prop_takeoff <= a*J_takeoff,
+			  J_takeoff <= 1] #As defined by manufacturer at 2600 RPM
+constraints+=[P_takeoff <= P_upper]
+constraints+=[T_takeoff<=(P_takeoff*n_prop_takeoff)/Vmin]
+
+#need to fix non-dimensionality here with froude number relation
+constraints+=[D_water >= W_MTOW*((Vmin/LWL**0.5)*0.015 + savitskyConstant)]
+constraints+=[T_takeoff>=D_water]
+
+
 # constraints += [W_MTOW >= W_zfw + W_fuel,
 # 				 >= ,
 # 				]
