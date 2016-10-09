@@ -1,3 +1,2 @@
-Tool for multirotor design in the browser. Definitely WIP.
-
+Summer project, now overweight and in need of redesign. Approaching feasibility for designed mission now.
 
