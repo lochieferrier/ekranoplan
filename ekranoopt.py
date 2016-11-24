@@ -107,7 +107,7 @@ with gpkit.SignomialsEnabled():
 
 
 with gpkit.SignomialsEnabled():
-	constraints += [e <= 1.78*(1-0.045*A**0.68)-0.64, e>=0.1,A<=3*1.38] #Raymer 12.6 
+	constraints += [e <= 1.78*(1-0.045*A**0.68)-0.64, e>=0.1,A<=3*1.38] #Raymer 12.6
 constraints+=[C_Di >= C_L**2/(3.1415*e*A),
 			wingRe <= (rho/mu)*V*(S/A)**0.5,
 			C_Df >= 0.074*(wingRe)**-0.2,
@@ -126,6 +126,46 @@ W_mnt = Variable('W_mnt',8*9.8,'N','mount weight')
 W_fuel = Variable('W_fuel','N','fuel weight')
 W_zfw = Variable('W_zfw','N','zero fuel weight')
 W_fuse = Variable('W_fuse','N','weight of everything except for wings')
+
+#Positions (measured from front of wing + 3m (to make positive cs))
+shift = 3
+x_boat = Variable('x_boat',-0.75+shift,'m')
+x_person = Variable('x_person',0+shift,'m')
+x_acc = Variable('x_acc',0.4+shift,'m')
+x_eng = Variable('x_eng',-0.79+shift,'m')
+x_wings = Variable('x_wings',-0.69+shift,'m')
+x_tail = Variable('x_tail',-2.83+shift,'m')
+x_mnt = Variable('x_mnt',-0.79+shift,'m')
+x_fuel = Variable('x_fuel',-0.3+shift,'m')
+
+# Generating moments
+M_boat = Variable("M_Boat","N*m")
+M_person = Variable("M_person","N*m")
+M_acc = Variable("M_acc","N*m")
+M_eng = Variable("M_eng","N*m")
+M_wings = Variable("M_wings","N*m")
+M_tail = Variable("M_tail","N*m")
+M_mnt = Variable("M_mnt","N*m")
+M_fuel = Variable("M_fuel","N*m")
+
+M_total = Variable("M_total","N*m")
+x_cg = Variable("x_cg","m")
+x_cg_lim_front = Variable("x_cg_lim_front",-0.45 + shift,"m")
+x_cg_lim_rear = Variable("x_cg_lim_front",-0.675 + shift,"m")
+
+constraints+=[M_boat==W_boat*x_boat,
+			  M_person==W_person*x_person,
+			  M_acc==W_acc*x_acc,
+			  M_eng==W_eng*x_eng,
+			  M_wings==W_wings*x_wings,
+			  M_tail==W_tail*x_tail,
+			  M_mnt==W_mnt*x_mnt,
+			  M_fuel==W_fuel*x_fuel,
+			  M_total>=M_boat+M_person+M_acc+M_eng+M_wings+M_tail+M_mnt+M_fuel
+			  ,x_cg == M_total/W,
+			  x_cg <= x_cg_lim_front,
+			  x_cg >= x_cg_lim_rear]
+
 with gpkit.SignomialsEnabled():
 	constraints+=[W_zfw>= W_boat + W_person + W_acc + W_eng + W_wings + W_boom + W_tail + W_mnt]
 	constraints+=[W >= W_zfw+W_fuel]
@@ -169,7 +209,7 @@ constraints+=[n_0<=n_eng*n_prop]
 
 #Structures
 #6061-T6 wing model, two sticks and fabric stretched approach
-#		  - - - - - - - 
+#		  - - - - - - -
 #	(s1)-      fabric^  ---(s2)
 #
 # Load is assumed to be at the center of aerodynamic pressure
