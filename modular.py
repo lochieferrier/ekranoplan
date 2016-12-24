@@ -7,8 +7,10 @@ class Ekranoplan(Model):
     def setup(self):
         self.fuse = Fuselage()
         self.engine = Engine()
+        self.propeller = Propeller()
         self.wing = Wing()
-        self.components = [self.fuse, self.engine, self.wing]
+        self.fuel = Fuel()
+        self.components = [self.fuse, self.engine, self.propeller, self.wing]
 
         W = Variable("W", "N", "weight")
         self.weight = W
@@ -23,20 +25,33 @@ class Ekranoplan(Model):
 
 
 class EkranoplanP(Model):
-    "Aircraft flight physics: weight <= lift, fuel burn"
+
     def setup(self, aircraft, state):
         self.aircraft = aircraft
         self.wing_aero = aircraft.wing.dynamic(state)
-        self.perf_models = [self.wing_aero]
+        self.propeller_p = aircraft.propeller.dynamic(state)
+        self.engine_p = aircraft.engine.dynamic(state)
+        self.perf_models = [self.wing_aero,self.propeller_p]
+
         Wfuel = Variable("W_{fuel}", "N", "fuel weight")
         Wburn = Variable("W_{burn}", "N", "segment fuel burn")
         R = Variable("R","m","Breguet range")
+        z_bre = Variable("z_bre","-","Breguet range parameter")
+        L = Variable("L","N","lift")
         return self.perf_models, [
             aircraft.weight + Wfuel <= (0.5*state["\\rho"]*state["V"]**2
                                         * self.wing_aero["C_L"]
                                         * aircraft.wing["S"]),
-            Wburn >= 0.1*self.wing_aero["D"]
-            ]
+            L <= (0.5*state["\\rho"]*state["V"]**2
+                                        * self.wing_aero["C_L"]
+                                        * aircraft.wing["S"]),
+            Wburn >= 0.1*self.wing_aero["D"],
+            self.propeller_p["T"] >= self.wing_aero["D"],
+            z_bre >= (state['g']*R*self.propeller_p['T'])/(self.aircraft.fuel['h']*1*(L)),
+            (Wfuel/aircraft.weight) >= z_bre + (z_bre**2)/2 + (z_bre**3)/6 + (z_bre**4)/24,
+            state["engineShaftP"] <= self.engine_p["P"]
+
+        ]
 
 
 class FlightState(Model):
@@ -45,15 +60,17 @@ class FlightState(Model):
         Variable("V", 40, "m/s", "true airspeed")
         Variable("\\mu", 1.628e-5, "N*s/m^2", "dynamic viscosity")
         Variable("\\rho", 0.74, "kg/m^3", "air density")
-        Variable("mdot",1,"kg/s","fuel flow rate")
+        Variable("mdot",4,"kg/s","fuel flow rate")
+        Variable("engineShaftP",20,"W","engine shaft power")
+        Variable("g",9.8,"m/s/s","acceleration due to gravity")
 
 
 class FlightSegment(Model):
     "Combines a context (flight state) and a component (the aircraft)"
-    def setup(self, aircraft):
+    def setup(self, ekranoplan):
         self.flightstate = FlightState()
-        self.aircraftp = aircraft.dynamic(self.flightstate)
-        return self.flightstate, self.aircraftp
+        self.ekranoplanp = ekranoplan.dynamic(self.flightstate)
+        return self.flightstate, self.ekranoplanp
 
 
 class Mission(Model):
@@ -62,12 +79,16 @@ class Mission(Model):
         with Vectorize(4):  # four flight segments
             fs = FlightSegment(aircraft)
 
-        Wburn = fs.aircraftp["W_{burn}"]
-        Wfuel = fs.aircraftp["W_{fuel}"]
-        self.takeoff_fuel = Wfuel[0]
+        Wburn = fs.ekranoplanp["W_{burn}"]
+        Wfuel = fs.ekranoplanp["W_{fuel}"]
+        rangeHelper = fs.ekranoplanp["R"]
 
+        self.R = rangeHelper[-1]
+        self.takeoff_fuel = Wfuel[0]
         return fs, [Wfuel[:-1] >= Wfuel[1:] + Wburn[:-1],
-                    Wfuel[-1] >= Wburn[-1]]
+                    Wfuel[-1] >= Wburn[-1],
+                    rangeHelper[:-1] >= rangeHelper[1:],
+                    rangeHelper[-1] >= rangeHelper[0]]
 
 
 class Wing(Model):
@@ -100,7 +121,7 @@ class WingAero(Model):
             CD >= (0.074/Re**0.2 + CL**2/np.pi/wing["A"]/e),
             Re == state["\\rho"]*state["V"]*wing["c"]/state["\\mu"],
             D >= 0.5*state["\\rho"]*state["V"]**2*CD*wing["S"],
-            ]
+        ]
 
 
 class Fuselage(Model):
@@ -124,7 +145,7 @@ class Engine(Model):
     def setup(self):
         Variable("W",30,'N',"Weight")
         Variable("maxBSFC",1.4359644493044238e-07,"kg/W/s","maximum brake specfic fuel consumption")
-        Variable("maxP","W","Maximum power of engine")
+        Variable("maxP",35e3,"W","Maximum power of engine")
         self.fuel = Fuel()
 
     def dynamic(self,state):
@@ -133,18 +154,33 @@ class Engine(Model):
 class EngineP(Model):
     def setup(self,engine,state):
         # Simple fuel flow vs power output model
-        P = Variable("P","W","Power")
+        P = Variable("P",35e3,"W","Power")
 
-        return [P <= state["mdot"]/engine["maxBSFC"]];
+        return [P <= state["mdot"]/engine["maxBSFC"],
+                P <= engine["maxP"]];
 
 class Fuel(Model):
     def setup(self):
         Variable("h",42.448e6,"J/kg","Specific heat")
-        Variable("rho",719.7 'kg/m3',"Density")
+        Variable("rho",719.7, 'kg/m^3',"Density")
 
+class Propeller(Model):
+    def setup(self):
+        Variable("W",10,'N',"Weight")
+        Variable("powerToThrust",25 ,"N/W","Power to thrust ratio")
+
+    def dynamic(self,state):
+        return PropellerP(self,state)
+
+class PropellerP(Model):
+    def setup(self,propeller,state):
+        T = Variable("T","N","Thrust")
+        return [T <= propeller["powerToThrust"]*state["engineShaftP"]]
 
 AC = Ekranoplan()
 MISSION = Mission(AC)
-M = Model(MISSION.takeoff_fuel, [MISSION, AC])
+objective = 1/MISSION.R
+M = Model(objective, [MISSION, AC])
+M.debug()
 SOL = M.solve(verbosity=0)
 print SOL.table()
