@@ -2,34 +2,35 @@
 import numpy as np
 from gpkit import Model, Variable, Vectorize
 
-class Aircraft(Model):
+class Ekranoplan(Model):
     "The vehicle model"
     def setup(self):
         self.fuse = Fuselage()
+        self.engine = Engine()
         self.wing = Wing()
-        self.components = [self.fuse, self.wing]
+        self.components = [self.fuse, self.engine, self.wing]
 
-        W = Variable("W", "lbf", "weight")
+        W = Variable("W", "N", "weight")
         self.weight = W
 
         return self.components, [
             W >= sum(c["W"] for c in self.components)
-            ]
+        ]
 
     def dynamic(self, state):
         "This component's performance model for a given state."
-        return AircraftP(self, state)
+        return EkranoplanP(self, state)
 
 
-class AircraftP(Model):
+class EkranoplanP(Model):
     "Aircraft flight physics: weight <= lift, fuel burn"
     def setup(self, aircraft, state):
         self.aircraft = aircraft
         self.wing_aero = aircraft.wing.dynamic(state)
         self.perf_models = [self.wing_aero]
-        Wfuel = Variable("W_{fuel}", "lbf", "fuel weight")
-        Wburn = Variable("W_{burn}", "lbf", "segment fuel burn")
-
+        Wfuel = Variable("W_{fuel}", "N", "fuel weight")
+        Wburn = Variable("W_{burn}", "N", "segment fuel burn")
+        R = Variable("R","m","Breguet range")
         return self.perf_models, [
             aircraft.weight + Wfuel <= (0.5*state["\\rho"]*state["V"]**2
                                         * self.wing_aero["C_L"]
@@ -41,9 +42,10 @@ class AircraftP(Model):
 class FlightState(Model):
     "Context for evaluating flight physics"
     def setup(self):
-        Variable("V", 40, "knots", "true airspeed")
+        Variable("V", 40, "m/s", "true airspeed")
         Variable("\\mu", 1.628e-5, "N*s/m^2", "dynamic viscosity")
         Variable("\\rho", 0.74, "kg/m^3", "air density")
+        Variable("mdot",1,"kg/s","fuel flow rate")
 
 
 class FlightSegment(Model):
@@ -75,11 +77,11 @@ class Wing(Model):
         return WingAero(self, state)
 
     def setup(self):
-        W = Variable("W", "lbf", "weight")
-        S = Variable("S", 190, "ft^2", "surface area")
-        rho = Variable("\\rho", 1, "lbf/ft^2", "areal density")
+        W = Variable("W", "N", "weight")
+        S = Variable("S", 190, "m^2", "surface area")
+        rho = Variable("\\rho", 1, "N/m^2", "areal density")
         A = Variable("A", 27, "-", "aspect ratio")
-        c = Variable("c", "ft", "mean chord")
+        c = Variable("c", "m", "mean chord")
 
         return [W >= S*rho,
                 c == (S/A)**0.5]
@@ -92,7 +94,7 @@ class WingAero(Model):
         CL = Variable("C_L", "-", "lift coefficient")
         e = Variable("e", 0.9, "-", "Oswald efficiency")
         Re = Variable("Re", "-", "Reynold's number")
-        D = Variable("D", "lbf", "drag force")
+        D = Variable("D", "N", "drag force")
 
         return [
             CD >= (0.074/Re**0.2 + CL**2/np.pi/wing["A"]/e),
@@ -111,13 +113,37 @@ class Fuselage(Model):
         # S = Variable("S", "ft^2", "wetted area")
         # cd = Variable("c_d", .0047, "-", "drag coefficient")
         # CDA = Variable("CDA", "ft^2", "drag area")
-        Variable("W", 100, "lbf", "weight")
+        Variable("W", 100, "N", "weight")
 
 class FuselageAero(Model):
     def setup(self):
-        Variable("D",100,'lbf',"drag")
+        Variable("D",100,'N',"Drag")
 
-AC = Aircraft()
+
+class Engine(Model):
+    def setup(self):
+        Variable("W",30,'N',"Weight")
+        Variable("maxBSFC",1.4359644493044238e-07,"kg/W/s","maximum brake specfic fuel consumption")
+        Variable("maxP","W","Maximum power of engine")
+        self.fuel = Fuel()
+
+    def dynamic(self,state):
+        return EngineP(self,state)
+
+class EngineP(Model):
+    def setup(self,engine,state):
+        # Simple fuel flow vs power output model
+        P = Variable("P","W","Power")
+
+        return [P <= state["mdot"]/engine["maxBSFC"]];
+
+class Fuel(Model):
+    def setup(self):
+        Variable("h",42.448e6,"J/kg","Specific heat")
+        Variable("rho",719.7 'kg/m3',"Density")
+
+
+AC = Ekranoplan()
 MISSION = Mission(AC)
 M = Model(MISSION.takeoff_fuel, [MISSION, AC])
 SOL = M.solve(verbosity=0)

@@ -248,7 +248,7 @@ W_MTOW = Variable('W_MTOW','N','weight var for MTOW')
 # 				 >= ,
 # 				]
 #Cruise flight constraints
-constraints += [R <= (W_fuel/(mdot*g)) * V,
+constraints += [#R <= (W_fuel/(mdot*g)) * V,
 		#R<=(V/g)*(1/TSFC)*(C_L/C_D)*Wfrac,
 			   W_fuel <= Variable('W_fuelupper',18*9.8,'N','fuel upper limit'),
 			   #R >= Variable("R_lower",1e3,'m','range lower bound'),
