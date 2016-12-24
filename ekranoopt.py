@@ -1,9 +1,9 @@
 import numpy as np
 import gpkit
 from gpkit import Variable, Model
-from gpkit.feasibility import feasibility_model
-from gpkit.interactive.plotting import plot_convergence
-import matplotlib.pyplot as plt
+# from gpkit.feasibility import feasibility_model
+# from gpkit.interactive.plotting import plot_convergence
+# import matplotlib.pyplot as plt
 from gpkit import ConstraintSet
 
 
@@ -259,7 +259,7 @@ constraints += [R <= (W_fuel/(mdot*g)) * V,
 
 objective = 1/R
 m = Model(objective,constraints)
-so2 = feasibility_model(m.gp(),"max")
+# so2 = feasibility_model(m.gp(),"max")
 sol = m.solve(verbosity=0)
 print(sol.table())
 rangeInKm = sol(0.001/objective)
