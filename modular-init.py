@@ -5,11 +5,12 @@ from gpkit import Model, Variable, Vectorize
 class Aircraft(Model):
     "The vehicle model"
     def setup(self):
-        self.fuse = Fuselage()
+        self.hull = Hull()
         self.wing = Wing()
         self.engine = Engine()
         self.propeller = Propeller()
-        self.components = [self.fuse, self.engine, self.propeller, self.wing]
+        self.pilot = Pilot()
+        self.components = [self.hull, self.engine, self.propeller, self.wing, self.pilot]
 
         W = Variable("W", "N", "weight")
         self.weight = W
@@ -40,7 +41,7 @@ class AircraftP(Model):
                                         * self.wing_aero["C_L"]
                                         * aircraft.wing["S"]),
             self.propeller_p['P_in'] == self.engine_p.P,
-            Wburn >= 0.1*self.wing_aero["D"],
+            Wburn >= 0.01*self.wing_aero["D"],
             self.propeller_p["T"] >= self.wing_aero["D"]
         ]
 
@@ -78,9 +79,6 @@ class Mission(Model):
 
 class Wing(Model):
     "Aircraft wing model"
-    def dynamic(self, state):
-        "Returns this component's performance model for a given state."
-        return WingAero(self, state)
 
     def setup(self):
         W = Variable("W", "N", "weight")
@@ -91,6 +89,9 @@ class Wing(Model):
 
         return [W >= S*rho,
                 c == (S/A)**0.5]
+    def dynamic(self, state):
+        "Returns this component's performance model for a given state."
+        return WingAero(self, state)
 
 
 class WingAero(Model):
@@ -109,7 +110,7 @@ class WingAero(Model):
             ]
 
 
-class Fuselage(Model):
+class Hull(Model):
     "The thing that carries the fuel, engine, and payload"
     def setup(self):
         # fuselage needs an external dynamic drag model,
@@ -119,11 +120,11 @@ class Fuselage(Model):
         # S = Variable("S", "ft^2", "wetted area")
         # cd = Variable("c_d", .0047, "-", "drag coefficient")
         # CDA = Variable("CDA", "ft^2", "drag area")
-        Variable("W", 100, "N", "weight")
+        Variable("W", 101.99, "N", "weight")
 
 class Engine(Model):
     def setup(self):
-        W = Variable("W",100,"N","weight")
+        W = Variable("W",421.4,"N","weight")
         P_max = Variable("P_max",10000,"W","max engine power output")
         BSFC_min = Variable("BSFC_min",1.4359644493044238e-07,"kg/W/s","maximum brake specfic fuel consumption")
     def dynamic(self,state):
@@ -139,21 +140,33 @@ class EngineP(Model):
 class Propeller(Model):
     def setup(self):
         W = Variable("W",20,"N","weight")
-        D = Variable("D",1,"m","Diameter")
+        D = Variable("D",1.5,"m","Diameter")
         eta = Variable("eta",100,"N/W","BS thrust to power ratio for prop")
     def dynamic(self,state):
         return PropellerP(self,state)
 
 class PropellerP(Model):
     def setup(self,propeller,state):
+        # What the hell is a?
+        a = 0.8
         T = Variable("T","N","thrust")
         f = Variable("f","1/s","frequency")
         P_in = Variable("P_in","W","power input")
-        n = Variable("n","-","efficiency")
-        return [T<= P_in*propeller["eta"]]
+        n = Variable("n",0.8,"-","efficiency")
+        J = Variable("J","-","advance ratio")
+        return [J <= state['V']/(f*propeller["D"]),
+                f <= Variable("f",45,"1/s","prop speed limit"),
+                n <= a*J,
+                T<= P_in*n/state['V']]
+
+class Pilot(Model):
+    def setup(self):
+        W = Variable("W",735,"N","weight")
+
 
 AC = Aircraft()
 MISSION = Mission(AC)
-M = Model(MISSION.takeoff_fuel/MISSION.range, [MISSION, AC])
+M = Model(1/MISSION.range, [MISSION, AC])
+M.debug()
 SOL = M.solve(verbosity=0)
 print SOL.table()
