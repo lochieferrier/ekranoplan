@@ -1,6 +1,6 @@
 """Modular aircraft concept"""
 import numpy as np
-from gpkit import Model, Variable, Vectorize
+from gpkit import Model, Variable, Vectorize, VectorVariable
 
 class Aircraft(Model):
     "The vehicle model"
@@ -50,7 +50,7 @@ class FlightState(Model):
     def setup(self):
         Variable("V","m/s", "true airspeed")
         Variable("\\mu", 1.628e-5, "N*s/m^2", "dynamic viscosity")
-        Variable("\\rho", 0.74, "kg/m^3", "air density")
+        Variable("\\rho", 1.225, "kg/m^3", "air density")
         Variable("g", 9.8, "m/s/s", "gravity")
 
 class FlightSegment(Model):
@@ -82,9 +82,9 @@ class Wing(Model):
 
     def setup(self):
         W = Variable("W", "N", "weight")
-        S = Variable("S", 190, "m^2", "surface area")
+        S = Variable("S", "m^2", "surface area")
         rho = Variable("\\rho", 1, "N/m^2", "areal density")
-        A = Variable("A", 27, "-", "aspect ratio")
+        A = Variable("A",10, "-", "aspect ratio")
         c = Variable("c", "m", "mean chord")
 
         return [W >= S*rho,
@@ -132,7 +132,7 @@ class Engine(Model):
 
 class EngineP(Model):
     def setup(self,engine,state):
-        mdot = Variable("mdot",10,"kg/s","fuel mass flow")
+        mdot = Variable("mdot",0.01,"kg/s","fuel mass flow")
         self.P = Variable("P","W","engine power output")
         return [self.P <= mdot/engine["BSFC_min"],
                 self.P <= engine["P_max"]]
@@ -154,7 +154,7 @@ class PropellerP(Model):
         P_in = Variable("P_in","W","power input")
         n = Variable("n",0.8,"-","efficiency")
         J = Variable("J","-","advance ratio")
-        return [J <= state['V']/(f*propeller["D"]),
+        return [J == state['V']/(f*propeller["D"]),
                 f <= Variable("f",45,"1/s","prop speed limit"),
                 n <= a*J,
                 T<= P_in*n/state['V']]
