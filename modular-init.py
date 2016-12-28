@@ -15,7 +15,7 @@ class Aircraft(Model):
         W = Variable("W", "N", "weight")
         self.weight = W
         n_0 = Variable("n_0",0.8,"-") #Should belong to ekranoplan
-        h_fuel = Variable("h_fuel",100,"J/kg") #Should belong to ekranoplan
+        h_fuel = Variable("h_fuel",47300e3,"J/kg") #Should belong to ekranoplan
         return self.components, [
             W >= sum(c["W"] for c in self.components)
             ]
@@ -35,14 +35,18 @@ class AircraftP(Model):
         self.perf_models = [self.wing_aero,self.engine_p,self.propeller_p]
         Wfuel = Variable("W_{fuel}", "N", "fuel weight")
         Wburn = Variable("W_{burn}", "N", "segment fuel burn")
+        self.Range = Variable("range","m")
+        self.z_bre = Variable("z_bre","-")
 
         return self.perf_models, [
-            aircraft.weight + Wfuel <= (0.5*state["\\rho"]*state["V"]**2
+            aircraft.weight + Wfuel + Wburn <= (0.5*state["\\rho"]*state["V"]**2
                                         * self.wing_aero["C_L"]
                                         * aircraft.wing["S"]),
             self.propeller_p['P_in'] == self.engine_p.P,
             Wburn >= 0.01*self.wing_aero["D"],
-            self.propeller_p["T"] >= self.wing_aero["D"]
+            self.propeller_p["T"] >= self.wing_aero["D"],
+            self.z_bre >= (state["g"]*self.Range*self.wing_aero["D"])/(aircraft["h_fuel"]*aircraft["n_0"]*aircraft.weight),
+            Wburn/aircraft.weight >= self.z_bre + (self.z_bre**2)/2 + (self.z_bre**3)/6 + (self.z_bre**4)/24,
         ]
 
 class FlightState(Model):
@@ -60,7 +64,6 @@ class FlightSegment(Model):
         self.aircraftp = aircraft.dynamic(self.flightstate)
         return self.flightstate, self.aircraftp
 
-
 class Mission(Model):
     "A sequence of flight segments"
     def setup(self, aircraft):
@@ -70,12 +73,12 @@ class Mission(Model):
         Wburn = fs.aircraftp["W_{burn}"]
         Wfuel = fs.aircraftp["W_{fuel}"]
         self.takeoff_fuel = Wfuel[0]
-        self.range = Variable("Range","m")
+        self.range = Variable("range","m")
         self.z_bre = Variable("z_bre","-")
         return fs, [Wfuel[:-1] >= Wfuel[1:] + Wburn[:-1],
                     Wfuel[-1] >= Wburn[-1],
-                    self.z_bre >= (fs.flightstate["g"]*self.range*fs.aircraftp.wing_aero["D"])/(aircraft["h_fuel"]*aircraft["n_0"]*aircraft.weight),
-                    Wfuel[0]/aircraft.weight >= self.z_bre + (self.z_bre**2)/2 + (self.z_bre**3)/6 + (self.z_bre**4)/24]
+                    fs.aircraftp.Range == self.range/4
+        ]
 
 class Wing(Model):
     "Aircraft wing model"
@@ -107,7 +110,7 @@ class WingAero(Model):
             CD >= (0.074/Re**0.2 + CL**2/np.pi/wing["A"]/e),
             Re == state["\\rho"]*state["V"]*wing["c"]/state["\\mu"],
             D >= 0.5*state["\\rho"]*state["V"]**2*CD*wing["S"],
-            ]
+        ]
 
 
 class Hull(Model):
@@ -132,7 +135,7 @@ class Engine(Model):
 
 class EngineP(Model):
     def setup(self,engine,state):
-        mdot = Variable("mdot",0.01,"kg/s","fuel mass flow")
+        mdot = Variable("mdot",0.001,"kg/s","fuel mass flow")
         self.P = Variable("P","W","engine power output")
         return [self.P <= mdot/engine["BSFC_min"],
                 self.P <= engine["P_max"]]
@@ -166,6 +169,7 @@ class Pilot(Model):
 
 AC = Aircraft()
 MISSION = Mission(AC)
+# objective = MISSION.range[0] + MISSION.range[1] + MISSION.range[2] + MISSION.range[3]
 M = Model(1/MISSION.range, [MISSION, AC])
 M.debug()
 SOL = M.solve(verbosity=0)
