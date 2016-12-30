@@ -1,0 +1,9 @@
+void main() {
+    ClearVSPModel();
+    ReadVSPFile("/home/lochie/ekranoplan/sketch.vsp3");
+    Update();
+    Print("Update .vsp3 file\n",true);
+        ReadApplyDESFile('/home/lochie/ekranoplan/design.des');
+    Print("Apply .des file\n",true);
+    Update();
+}

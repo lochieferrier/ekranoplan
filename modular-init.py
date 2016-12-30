@@ -1,6 +1,7 @@
 """Modular aircraft concept"""
 import numpy as np
 from gpkit import Model, Variable, Vectorize, VectorVariable
+from vsp import updateOpenVSP
 
 class Aircraft(Model):
     "The vehicle model"
@@ -15,7 +16,9 @@ class Aircraft(Model):
         self.tail = Tail()
         self.avionics = Avionics()
         self.prop_tower = PropTower()
-        self.components = [self.hull, self.engine, self.propeller, self.wing, self.pilot, self.tail, self.avionics, self.prop_tower]
+        self.tail_boom = Beam()
+
+        self.components = [self.hull, self.engine, self.propeller, self.wing, self.pilot, self.tail, self.avionics, self.prop_tower, self.tail_boom]
 
         W = Variable("W", "N", "weight")
         self.weight = W
@@ -59,6 +62,8 @@ class AircraftP(Model):
             self.propeller_p["T"] >= self.D,
             self.z_bre >= (state["g"]*self.Range*self.D)/(aircraft.fuel['h']*aircraft["n_0"]*aircraft.weight),
             Wburn/aircraft.weight >= self.z_bre + (self.z_bre**2)/2 + (self.z_bre**3)/6 + (self.z_bre**4)/24,
+            # Stability
+            # X_G = X_Fh
         ]
 
 class FlightState(Model):
@@ -87,6 +92,7 @@ class Mission(Model):
         self.takeoff_fuel = Wfuel[0]
         self.range = Variable("range","m")
         self.z_bre = Variable("z_bre","-")
+        self.aircraft = aircraft
         return fs, [Wfuel[:-1] >= Wfuel[1:] + Wburn[:-1],
                     Wfuel[-1] >= Wburn[-1],
                     fs.aircraftp.Range[0] == 0.01*self.range,
@@ -96,22 +102,26 @@ class Mission(Model):
 
 class Wing(Model):
     "Aircraft wing model"
-
     def setup(self):
         W = Variable("W", "N", "weight")
         S = Variable("S", "m^2", "surface area")
         S_wet = Variable("S_wet", "m^2", "wetted area")
-        rho = Variable("\\rho", 0.425*9.8, "N/m^2", "areal density")
+        rho = Variable("\\rho",0.425*9.8, "N/m^2", "areal density")
         A = Variable("A", "-", "aspect ratio")
         c = Variable("c", "m", "mean chord")
         b = Variable("b", "m", "span")
-        return [W >= S*rho,
+        self.front_spar = TubeSpar()
+        
+        return self.perf_models, [W >= S*rho,
                 c == (S/A)**0.5,
                 b == A*c,
                 S == b*c]
+
     def dynamic(self, state):
         "Returns this component's performance model for a given state."
-        return WingAero(self, state)
+        self.front_spar_p = self.front_spar.dynamic()
+        self.perf_models = [self.front_spar_p]
+        return self.perf_models, WingAero(self, state)
 
 
 class WingAero(Model):
@@ -202,7 +212,19 @@ class Fuel(Model):
 
 class Tail(Model):
     def setup(self):
-        W = Variable("W",98,"N","weight")
+        W = Variable("W",20*9.8,"N","weight")
+        self.horiz = Wing()
+        self.vert = Wing()
+        return [self.horiz["c"] == self.vert["c"]]
+    def dynamic(self,state):
+        return TailP(self,state)
+
+class TailP(Model): 
+    def setup(self,tail,state):
+        self.horiz_model = tail.horiz.dynamic(state)
+        self.vert_model = tail.vert.dynamic(state)
+        self.perf_models = [self.horiz_model,self.vert_model]
+        return self.perf_models
 
 class Avionics(Model):
     def setup(self):
@@ -212,7 +234,56 @@ class PropTower(Model):
     def setup(self):
         W = Variable("W",16*9.8,"N","weight")
 
+class Beam(Model):
+    def setup(self):
+        W = Variable("W", 10*9.8,"N", "weight")
+        A = Variable("A", "m^2", "cross sectional area")
+        l = Variable("l", 3.4,"m", "length")
+        self.material = CarbonFiber()
+        return [W == self.material["rho"]*A*l]
 
+class TubeSpar(Model):
+    def setup(self):
+        W = Variable("W", 10*9.8,"N", "weight")
+        A = Variable("A", "m^2", "cross sectional area")
+        l = Variable("l", 3.4,"m", "length")
+        N_factor = Variable('N_factor',3,'-','load factor')
+        M_root = Variable('M_root','N*m','root bending moment')
+        r = Variable('r','m','radius')
+        r_upper = Variable('r_1upper',0.06,'m','radius limit')
+        t = Variable('t','m','thickness')
+        t_lower = Variable('t_lower',0.0001,'m','thickness lower limit'),
+        I = Variable('I','m^4','second moment of area')
+        self.material = Aluminum_6061_T6()
+        # Need to do the same adding up as is done in the aircraft master class.
+        return [W == self.material["rho"]*A*l,
+                I <= 3.141*(r**3)*t,
+                r <= r_upper,
+                t >= t_lower
+              ]
+    def dynamic(self):
+        return TubeSparP(self,state)
+
+
+class TubeSparP(Model):
+    def setup(self,tubespar,state):
+        s = Variable("s","N/m^2","tensile stress")
+        M_root = Variable("M_root","N*m","root moment")
+        s = Variable('s','N/m^2','maximum tensile stress')
+        FOS = Variable("FOS",1.5,"-","factor of safety")
+        return [s >= 0.5*M_root*tubespar["r"]/tubespar["I"],
+              s <= tubespar.material["ultimate_tensile"]/FOS]
+
+class CarbonFiber(Model):
+    def setup(self):
+        rho = Variable("rho",1550*9.8,"N/m^3")
+
+class Aluminum_6061_T6(Model):
+    def setup(self):
+        rho = Variable("rho",2700*9.8,"N/m^3")
+        ultimate_tensile = Variable("ultimate_tensile",310e6,"N/m^2")
+        E = Variable("E",68.9e9,"Pa","young's modulus")
+        return []
 
 AC = Aircraft()
 MISSION = Mission(AC)
@@ -229,6 +300,12 @@ rangeObjective = 500
 
 print('Range is ' + str(rangeInKm)+' km')
 print('At %s percent of range goal'%str(100*rangeInKm/rangeObjective))
+
+
+inputDict = {}
+
+updateOpenVSP({'IRQEKLNIYLX':SOL(AC.wing["b"]).magnitude,'FUGWYXQTPNJ':SOL(AC.wing["b"]).magnitude})
+
 # print('MTOW of ' + str(sol(W)))
 # print('Cruise LD of '+str(sol(C_L/C_D)))
 # W_fuelsol = sol(MISSION[])
