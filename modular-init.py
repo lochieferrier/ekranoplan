@@ -12,7 +12,10 @@ class Aircraft(Model):
         self.pilot = Pilot()
         self.fuel_tank = FuelTank()
         self.fuel = Fuel()
-        self.components = [self.hull, self.engine, self.propeller, self.wing, self.pilot]
+        self.tail = Tail()
+        self.avionics = Avionics()
+        self.prop_tower = PropTower()
+        self.components = [self.hull, self.engine, self.propeller, self.wing, self.pilot, self.tail, self.avionics, self.prop_tower]
 
         W = Variable("W", "N", "weight")
         self.weight = W
@@ -199,7 +202,16 @@ class Fuel(Model):
 
 class Tail(Model):
     def setup(self):
-        
+        W = Variable("W",98,"N","weight")
+
+class Avionics(Model):
+    def setup(self):
+        W = Variable("W",98,"N","weight")
+
+class PropTower(Model):
+    def setup(self):
+        W = Variable("W",16*9.8,"N","weight")
+
 
 
 AC = Aircraft()
